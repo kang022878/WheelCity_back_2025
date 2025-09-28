@@ -1,4 +1,5 @@
 🏙️ Wheel City Server
+
 FastAPI + MongoDB 기반의 휠도시 접근성 데이터 백엔드 서버입니다.
 가게의 입구 접근성(경사로/계단/자동문 등)을 저장하고, 프런트엔드 지도와 연동할 수 있도록 API를 제공합니다.
 
@@ -92,3 +93,4 @@ python scripts/seed_data.py
 - AI 추론 결과 저장 엔드포인트 구현 (inference_bridge.py)
 - 사용자 제보 검증 프로세스 추가
 - 지도 프런트엔드와 API 연동
+
