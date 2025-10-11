@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from bson import ObjectId
 from app.db import db
-from app.models import PlaceIn, serialize_doc
+from app.models.place import PlaceIn
+from app.models.utils import serialize_doc
 from app.deps import verify_internal
 
 router = APIRouter()
