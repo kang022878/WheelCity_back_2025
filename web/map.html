@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wheel City WebSocket Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f8fa;
+      padding: 20px;
+    }
+    h1 { color: #333; }
+    #messages {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 10px;
+      height: 400px;
+      overflow-y: scroll;
+    }
+    .msg {
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 5px;
+      background: #eaf2ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>🛰️ Wheel City WebSocket Monitor</h1>
+  <div id="messages"></div>
+
+  <script>
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/updates");
+
+    ws.onopen = () => {
+      console.log("✅ WebSocket connected");
+      const msgBox = document.getElementById("messages");
+      msgBox.innerHTML += "<div class='msg'>✅ Connected to WebSocket</div>";
+    };
+
+    ws.onmessage = (event) => {
+      console.log("📩 Message received:", event.data);
+      const msgBox = document.getElementById("messages");
+      const msg = document.createElement("div");
+      msg.className = "msg";
+      msg.textContent = "📡 " + event.data;
+      msgBox.appendChild(msg);
+    };
+
+    ws.onclose = () => {
+      console.log("❌ WebSocket disconnected");
+      const msgBox = document.getElementById("messages");
+      msgBox.innerHTML += "<div class='msg'>❌ Disconnected</div>";
+    };
+  </script>
+</body>
+</html>

@@ -39,6 +39,11 @@ from app.routers import health, places, reports
 from app.routers import ingest
 from app.routers import auth
 
+from app.routers import ws
+from fastapi.staticfiles import StaticFiles
+
+from app.ws.router import router as ws_router
+
 app = FastAPI(title="Wheel City API", version="0.1.0")
 
 origins = os.getenv("CORS_ORIGINS","").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
@@ -65,3 +70,9 @@ app.include_router(places.router,  prefix="/places",  tags=["places"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(ingest.router,  prefix="/ingest",  tags=["ingest"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+app.include_router(ws.router, tags=["ws"]) 
+
+app.mount("/web", StaticFiles(directory="web", html=True), name="web")
+
+app.include_router(ws_router)
