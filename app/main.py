@@ -37,6 +37,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db import connect, close
 from app.routers import health, places, reports
 from app.routers import ingest
+from app.routers import auth
 
 app = FastAPI(title="Wheel City API", version="0.1.0")
 
@@ -63,3 +64,4 @@ app.include_router(health.router,  prefix="/health",  tags=["health"])
 app.include_router(places.router,  prefix="/places",  tags=["places"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(ingest.router,  prefix="/ingest",  tags=["ingest"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])

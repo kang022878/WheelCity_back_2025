@@ -23,14 +23,14 @@ import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
-# 1️⃣ .env 파일 로드
+# .env 파일 로드
 load_dotenv()
 
-# 2️⃣ MongoDB Atlas 연결 정보
+# MongoDB Atlas 연결 정보
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME", "wheel_city")
 
-# 3️⃣ Atlas SSL 인증서 보장
+# Atlas SSL 인증서 보장
 CA = certifi.where()
 
 async def main():
@@ -47,11 +47,16 @@ async def main():
         print("❌ Connection failed:", e)
         return
 
-    # 4️⃣ 인덱스 생성
+    # 인덱스 생성
     print("⚙️ Creating indexes...")
     await db.places.create_index([("location", "2dsphere")])
     await db.observations.create_index([("placeId", 1), ("createdAt", -1)])
     await db.user_reports.create_index([("placeId", 1), ("status", 1), ("createdAt", -1)])
+
+    # users 컬렉션 인덱스 추가: username, email은 로그인/회원가입 시 자주 검색되므로 unique index를 추천
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("username", unique=True)
+    await db.users.create_index([("createdAt", -1)])  # 최근 가입자 정렬용
 
     print("🎉 Indexes created successfully!")
     client.close()
