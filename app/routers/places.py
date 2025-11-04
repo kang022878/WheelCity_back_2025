@@ -11,6 +11,7 @@ from typing import Literal
 
 class ReactionIn(BaseModel):
     vote: Literal["up", "down"]
+    action: Literal["increase", "decrease"] = "increase"
 
 router = APIRouter()
 
@@ -100,6 +101,10 @@ async def ingest(place_id: str, pred: dict, request: Request):
 # 좋아요/싫어요 수 라우트 추가
 @router.post("/{place_id}/react")
 async def react_place(place_id: str, payload: ReactionIn, request: Request):
+    """
+    장소 단위 좋아요/싫어요 수를 +1 또는 -1 하되,
+    0 이하로는 내려가지 않게 제한.
+    """
     db = _get_db_or_500(request)
 
     try:
@@ -107,23 +112,48 @@ async def react_place(place_id: str, payload: ReactionIn, request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="invalid id")
 
-    # 문서 존재/모양 가드(선택이지만 디버깅에 유용)
-    doc = await db.places.find_one({"_id": oid}, projection={"accessibility": 1})
+    # 현재 값 조회
+    doc = await db.places.find_one(
+        {"_id": oid},
+        projection={"accessibility.up": 1, "accessibility.down": 1}
+    )
     if not doc:
         raise HTTPException(status_code=404, detail="place not found")
-    acc = doc.get("accessibility")
-    if acc is not None and not isinstance(acc, dict):
-        raise HTTPException(status_code=500, detail="invalid document shape: 'accessibility' must be an object")
 
-    # 카운트 증가
+    acc = doc.get("accessibility", {})
+    current_value = acc.get(payload.vote, 0)
+
+    # 증가/감소 결정
+    if payload.action == "increase":
+        delta = 1
+    else:  # decrease
+        if current_value <= 0:
+            # 이미 0이면 감소 불가
+            return {
+                "place_id": place_id,
+                "message": f"{payload.vote} count is already 0",
+                "up": acc.get("up", 0),
+                "down": acc.get("down", 0)
+            }
+        delta = -1
+
+    # MongoDB 업데이트
     inc_path = f"accessibility.{payload.vote}"
-    res = await db.places.update_one({"_id": oid}, {"$inc": {inc_path: 1}})
+    res = await db.places.update_one({"_id": oid}, {"$inc": {inc_path: delta}})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="place not found")
 
-    doc2 = await db.places.find_one({"_id": oid}, projection={"accessibility.up": 1, "accessibility.down": 1})
+    # 업데이트 후 최신 값 반환
+    doc2 = await db.places.find_one(
+        {"_id": oid},
+        projection={"accessibility.up": 1, "accessibility.down": 1}
+    )
     acc2 = (doc2 or {}).get("accessibility", {})
-    return {"place_id": place_id, "up": acc2.get("up", 0), "down": acc2.get("down", 0)}
+    return {
+        "place_id": place_id,
+        "up": acc2.get("up", 0),
+        "down": acc2.get("down", 0)
+    }
 
 # 좋아요/싫어요 수 조회 라우트
 @router.get("/{place_id}/reactions")
