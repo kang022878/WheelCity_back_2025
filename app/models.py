@@ -5,7 +5,7 @@ class Location(BaseModel):
     type: Literal["Point"] = "Point"
     coordinates: List[float]  # [lng, lat]
 
-class Accessibility(BaseModel):
+class AccessibilityData(BaseModel):
     threshold: int
     entrance: int
     door: int
@@ -17,7 +17,7 @@ class Accessibility(BaseModel):
 class PlaceIn(BaseModel):
     name: str
     location: Location
-    accessibility: Accessibility
+    accessibility: AccessibilityData
     imageUrl: Optional[str] = None
     source: Optional[str] = "streetview"
 
