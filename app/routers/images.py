@@ -12,8 +12,8 @@ from app.models import (
     AccessibilityAnalysis,
     AnalysisRequest
 )
-from app.services.s3_service import s3_service
-from app.services.gemini_service import gemini_service
+from app.services.s3_service import get_s3_service, S3Service
+from app.services.gemini_service import get_gemini_service, GeminiService
 from app.services.yolov8_service import yolov8_service
 from app.deps import verify_internal
 import logging
@@ -29,7 +29,8 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 async def upload_image(
     file: UploadFile = File(...),
     place_id: Optional[str] = Form(None),
-    user_id: Optional[str] = Form(None)
+    user_id: Optional[str] = Form(None),
+    s3: S3Service = Depends(get_s3_service)
 ):
     """
     Upload a review/campaign image to S3
@@ -58,7 +59,7 @@ async def upload_image(
             )
         
         # Upload to S3
-        upload_result = await s3_service.upload_image(
+        upload_result = await s3.upload_image(
             file_content=content,
             filename=file.filename,
             content_type=file.content_type or "image/jpeg"
@@ -98,7 +99,7 @@ async def upload_image(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.post("/analyze", response_model=ImageAnalysisResult)
-async def analyze_image(request: AnalysisRequest):
+async def analyze_image(request: AnalysisRequest, gemini: GeminiService = Depends(get_gemini_service)):
     """
     Analyze uploaded image for accessibility using Gemini API
     """
@@ -146,7 +147,7 @@ async def analyze_image(request: AnalysisRequest):
         analysis_image = entrance_image if entrance_image else image_bytes
         
         # Analyze with Gemini
-        analysis_result = await gemini_service.analyze_accessibility(
+        analysis_result = await gemini.analyze_accessibility(
             image_bytes=analysis_image,
             filename=image_doc["filename"]
         )
@@ -232,7 +233,11 @@ async def get_image_metadata(image_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get image metadata: {str(e)}")
 
 @router.delete("/{image_id}")
-async def delete_image(image_id: str, dependencies=[Depends(verify_internal)]):
+async def delete_image(
+    image_id: str,
+    dependencies=[Depends(verify_internal)],
+    s3: S3Service = Depends(get_s3_service)
+):
     """
     Delete image from S3 and database (internal use only)
     """
@@ -243,7 +248,7 @@ async def delete_image(image_id: str, dependencies=[Depends(verify_internal)]):
             raise HTTPException(status_code=404, detail="Image not found")
         
         # Delete from S3
-        s3_deleted = await s3_service.delete_image(image_doc["s3_key"])
+        s3_deleted = await s3.delete_image(image_doc["s3_key"])
         
         # Delete from database
         await db.images.delete_one({"image_id": image_id})

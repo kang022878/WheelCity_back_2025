@@ -3,10 +3,12 @@ import json
 import re
 import time
 from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 import google.generativeai as genai
 from fastapi import HTTPException
 import logging
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 class GeminiService:
@@ -178,5 +180,11 @@ class GeminiService:
                 detail=f"Failed to analyze image: {str(e)}"
             )
 
-# Global instance
-gemini_service = GeminiService()
+# Provider (singleton) for dependency injection
+_gemini_service_instance = None
+
+def get_gemini_service() -> "GeminiService":
+    global _gemini_service_instance
+    if _gemini_service_instance is None:
+        _gemini_service_instance = GeminiService()
+    return _gemini_service_instance

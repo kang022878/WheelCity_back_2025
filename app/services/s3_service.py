@@ -6,6 +6,9 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from fastapi import HTTPException
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -106,5 +109,11 @@ class S3Service:
         except ClientError:
             return False
 
-# Global instance
-s3_service = S3Service()
+# Provider (singleton) for dependency injection
+_s3_service_instance = None
+
+def get_s3_service() -> "S3Service":
+    global _s3_service_instance
+    if _s3_service_instance is None:
+        _s3_service_instance = S3Service()
+    return _s3_service_instance

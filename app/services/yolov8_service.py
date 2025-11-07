@@ -6,6 +6,8 @@ from PIL import Image
 import logging
 import numpy as np
 from ultralytics import YOLO
+from torch.serialization import add_safe_globals
+import ultralytics.nn.tasks as ul_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,12 @@ class YOLOV8Service:
         Load YOLOV8 model
         """
         try:
+            # Allowlist Ultralytics DetectionModel for torch.load under PyTorch 2.6+
+            try:
+                add_safe_globals([ul_tasks.DetectionModel])
+                os.environ.setdefault("TORCH_LOAD_WEIGHTS_ONLY", "0")
+            except Exception:
+                pass
             if not os.path.exists(self.model_path):
                 logger.warning(f"YOLOV8 model not found at {self.model_path}. Using default model.")
                 # Use a default YOLOV8 model if custom model not found
