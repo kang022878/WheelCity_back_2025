@@ -1,5 +1,7 @@
+import logging
 from typing import List, Optional
 
+import requests
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -7,7 +9,11 @@ from pymongo import ReturnDocument
 
 from app.db import db
 from app.deps import verify_internal
-from app.models import AverageScores, ShopCreate, ShopUpdateAI, serialize_doc
+from app.models import AIPredictionRequest, AverageScores, ShopCreate, ShopUpdateAI, serialize_doc
+from app.services.gemini_service import get_gemini_service
+from app.services.yolov8_service import yolov8_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -123,21 +129,85 @@ async def search_shops(
 @router.post(
     "/{shop_id}/ai-prediction",
     dependencies=[Depends(verify_internal)],
-    summary="Store or update AI prediction for a shop",
+    summary="Analyze image and store AI prediction for a shop",
 )
-async def update_ai_prediction(
+async def analyze_and_update_ai_prediction(
     shop_id: str,
-    payload: ShopUpdateAI,
+    payload: AIPredictionRequest,
     database: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    """
+    Analyze an image URL using YOLOv8 and Gemini, then store the AI prediction.
+    The image should already be uploaded to S3 by the frontend.
+    """
     oid = _oid(shop_id)
-    update_doc = {"ai_prediction": payload.model_dump()}
-    res = await database.shops.find_one_and_update(
-        {"_id": oid},
-        {"$set": update_doc},
-        return_document=ReturnDocument.AFTER,
-    )
-    if not res:
+    
+    # Verify shop exists
+    shop = await database.shops.find_one({"_id": oid})
+    if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
-    return serialize_doc(res)
+    
+    try:
+        # Download image from S3 URL
+        image_url = str(payload.image_url)
+        logger.info(f"Downloading image from {image_url}")
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        image_bytes = response.content
+        
+        # Run YOLOv8 analysis
+        logger.info("Running YOLOv8 analysis...")
+        yolov8_features = await yolov8_service.analyze_accessibility_features(image_bytes)
+        
+        # Extract entrance region if detected for better Gemini analysis
+        entrance_image = None
+        if yolov8_features.get("entrance_detected", False):
+            entrance_image = await yolov8_service.extract_entrance_region(
+                image_bytes, yolov8_features.get("detections", [])
+            )
+        
+        # Use entrance region for Gemini analysis if available, otherwise use full image
+        analysis_image = entrance_image if entrance_image else image_bytes
+        filename = image_url.split("/")[-1] if "/" in image_url else "image.jpg"
+        
+        # Run Gemini analysis
+        logger.info("Running Gemini analysis...")
+        gemini = get_gemini_service()
+        gemini_result = await gemini.analyze_accessibility(analysis_image, filename)
+        
+        # Convert analysis results to AIPrediction format
+        # ramp: True if ramp detected OR if accessible (no curbs/steps)
+        # curb: True if stairs/curbs detected AND no ramp
+        ramp_detected = yolov8_features.get("ramp_detected", False)
+        stairs_detected = yolov8_features.get("stairs_detected", False)
+        is_accessible = gemini_result.get("accessible", False)
+        
+        # Determine ramp and curb based on detections and accessibility
+        has_ramp = ramp_detected or (is_accessible and not stairs_detected)
+        has_curb = stairs_detected and not ramp_detected
+        
+        # Create AI prediction
+        ai_prediction = ShopUpdateAI(
+            ramp=has_ramp,
+            curb=has_curb,
+            image_url=payload.image_url
+        )
+        
+        # Update shop with AI prediction
+        update_doc = {"ai_prediction": ai_prediction.model_dump()}
+        res = await database.shops.find_one_and_update(
+            {"_id": oid},
+            {"$set": update_doc},
+            return_document=ReturnDocument.AFTER,
+        )
+        
+        logger.info(f"AI prediction updated for shop {shop_id}: ramp={has_ramp}, curb={has_curb}")
+        return serialize_doc(res)
+        
+    except requests.RequestException as e:
+        logger.error(f"Failed to download image: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to download image from URL: {str(e)}")
+    except Exception as e:
+        logger.error(f"AI prediction analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 

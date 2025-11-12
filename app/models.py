@@ -62,6 +62,11 @@ class ShopUpdateAI(BaseModel):
     image_url: Optional[HttpUrl] = None
 
 
+class AIPredictionRequest(BaseModel):
+    """Request to analyze an image and generate AI prediction"""
+    image_url: HttpUrl
+
+
 class ReviewAICorrect(BaseModel):
     ramp: bool
     curb: bool
