@@ -1,4 +1,5 @@
 import asyncio, os
+from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 load_dotenv()
@@ -6,22 +7,54 @@ load_dotenv()
 async def main():
     client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
     db = client[os.getenv("DB_NAME","wheel_city")]
-    docs = [
+    user = await db.users.insert_one(
         {
-            "name":"카페 스타",
-            "location":{"type":"Point","coordinates":[126.9779451,37.5662952]},
-            "accessibility":{"threshold":0,"entrance":1,"door":1,"confidence":0.95,"modelVersion":"v1","source":"model"},
-            "imageUrl":None,"source":"seed"
-        },
-        {
-            "name":"투썸 종각점",
-            "location":{"type":"Point","coordinates":[126.982,37.57]},
-            "accessibility":{"threshold":2,"entrance":2,"door":0,"confidence":0.82,"modelVersion":"v1","source":"model"},
-            "imageUrl":None,"source":"seed"
+            "auth_id": "demo-user-1",
+            "wheelchair_type": "manual",
+            "max_height_cm": 12,
+            "last_location": {"type": "Point", "coordinates": [126.9779451, 37.5662952]},
+            "review_score": 0,
         }
-    ]
-    await db.places.insert_many(docs)
-    print("Seeded")
+    )
+
+    shops = await db.shops.insert_many(
+        [
+            {
+                "name": "카페 스타",
+                "location": {"type": "Point", "coordinates": [126.9779451, 37.5662952]},
+                "ai_prediction": {
+                    "ramp": True,
+                    "curb": False,
+                    "image_url": None,
+                },
+            },
+            {
+                "name": "투썸 종각점",
+                "location": {"type": "Point", "coordinates": [126.982, 37.57]},
+                "ai_prediction": {
+                    "ramp": False,
+                    "curb": True,
+                    "image_url": None,
+                },
+            },
+        ]
+    )
+
+    await db.reviews.insert_one(
+        {
+            "shop_id": shops.inserted_ids[0],
+            "user_id": user.inserted_id,
+            "enter": True,
+            "alone": False,
+            "comfort": True,
+            "ai_correct": {"ramp": True, "curb": False},
+            "photo_urls": [],
+            "review_text": "친절하고 진입이 쉬웠어요.",
+            "created_at": datetime.utcnow(),
+        }
+    )
+
+    print("Seeded demo data")
     client.close()
 
 asyncio.run(main())

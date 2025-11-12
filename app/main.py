@@ -1,8 +1,9 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.db import connect, close
-from app.routers import health, places, reports, accessibility
+from app.db import connect, close, db as mongo_db
+from app.routers import health, reviews, shops, users
+
 
 app = FastAPI(title="Wheel City API", version="0.1.0")
 
@@ -17,16 +18,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup():
-    await connect()                # app 인자 제거
-    from app.db import db as gdb
-    app.state.db = gdb 
+    await connect()
+    app.state.db = mongo_db
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await close()
 
 app.include_router(health.router, prefix="/health", tags=["health"])
-app.include_router(places.router, prefix="/places", tags=["places"])
-app.include_router(reports.router, prefix="/reports", tags=["reports"])
-
-app.include_router(accessibility.router, tags=["accessibility"])
+app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(shops.router, prefix="/shops", tags=["shops"])
+app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])

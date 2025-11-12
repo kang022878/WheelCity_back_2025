@@ -71,10 +71,9 @@ wheel_city_server/
 │   │   ├── __init__.py
 
 │   │   ├── health.py        # 헬스체크 API (/health)
-
-│   │   ├── places.py        # 장소 관련 API (/places)
-
-│   │   └── reports.py       # 사용자 제보 API (/reports)
+│   │   ├── users.py         # 사용자 관리 API (/users)
+│   │   ├── shops.py         # 상점 관련 API (/shops)
+│   │   └── reviews.py       # 리뷰 API (/reviews)
 
 │   └── services/
 
@@ -105,10 +104,9 @@ uvicorn app.main:app --reload
 
 ## 6. 예시 API
 - GET /health → 서버 상태 확인
-- GET /places/nearby?lat=37.5663&lng=126.9779&radius=1000
-  → 특정 위치 주변의 접근성 장소 데이터 반환
-- POST /reports/{place_id}
-  → 사용자 제보 등록
+- POST /users/ (내부 키 필요) → 신규 사용자 등록
+- GET /shops/nearby?lat=37.5663&lng=126.9779&radius=1000 → 주변 상점 조회
+- POST /reviews/{shop_id} → 상점 리뷰 등록
 
 
 # 🛠️ 개발 편의
