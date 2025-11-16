@@ -16,10 +16,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 4. Python dependency 복사 & 설치
-COPY requirements_mac.txt ./
+COPY requirements.txt ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements_mac.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # 5. 전체 코드 복사
 COPY . .
