@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ReturnDocument
 
-from app.models import UserCreate, UserUpdate, serialize_doc
+from app.models import UserCreate, UserUpdate, UserGetOrCreate, serialize_doc
 
 router = APIRouter()
 
@@ -65,4 +65,45 @@ async def update_current_user(
     if not res:
         raise HTTPException(status_code=404, detail="User not found")
     return serialize_doc(res)
+
+
+@router.post("/get-or-create", summary="Get or create a user by Kakao ID")
+async def get_or_create_user_by_kakao(
+    payload: UserGetOrCreate,
+    database: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """
+    Get existing user by Kakao ID, or create a new one if not found.
+    Returns the user_id and whether the user was created.
+    """
+    # Try to find existing user by kakao_id
+    existing_user = await database.users.find_one({"kakao_id": payload.kakao_id})
+    
+    if existing_user:
+        return {
+            "user_id": str(existing_user["_id"]),
+            "created": False,
+            "user": serialize_doc(existing_user)
+        }
+    
+    # User doesn't exist, create a new one
+    # Use kakao_id as auth_id for Kakao users
+    new_user_data = {
+        "auth_id": f"kakao_{payload.kakao_id}",
+        "kakao_id": payload.kakao_id,
+        "email": payload.email,
+        "name": payload.name or "카카오사용자",
+        "wheelchair_type": "manual",  # Default values
+        "max_height_cm": 100,  # Default value
+        "review_score": 0.0,
+    }
+    
+    result = await database.users.insert_one(new_user_data)
+    new_user_data["_id"] = result.inserted_id
+    
+    return {
+        "user_id": str(result.inserted_id),
+        "created": True,
+        "user": serialize_doc(new_user_data)
+    }
 

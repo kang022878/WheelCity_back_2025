@@ -25,6 +25,9 @@ class UserBase(BaseModel):
     max_height_cm: int = Field(..., ge=0)
     last_location: Optional[GeoPoint] = None
     review_score: float = Field(0.0, ge=0)
+    kakao_id: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -36,6 +39,16 @@ class UserUpdate(BaseModel):
     max_height_cm: Optional[int] = Field(None, ge=0)
     last_location: Optional[GeoPoint] = None
     review_score: Optional[float] = Field(None, ge=0)
+    kakao_id: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+
+
+class UserGetOrCreate(BaseModel):
+    """Request model for getting or creating a user by Kakao ID"""
+    kakao_id: str
+    email: Optional[str] = None
+    name: Optional[str] = None
 
 
 class AIPrediction(BaseModel):
@@ -77,9 +90,9 @@ class ReviewAICorrect(BaseModel):
 
 class ReviewCreate(BaseModel):
     user_id: str
-    enter: bool
-    alone: bool
-    comfort: bool
+    enter: Optional[bool] = None
+    alone: Optional[bool] = None
+    comfort: Optional[bool] = None
     ai_correct: ReviewAICorrect
     photo_urls: List[HttpUrl] = []
     review_text: Optional[str] = None
