@@ -266,15 +266,12 @@ async def analyze_and_update_ai_prediction(
         print(f"[AI-PRED] Gemini results: {gemini_result}", flush=True)
         
         # Convert analysis results to AIPrediction format
-        # ramp: True if ramp detected OR if accessible (no curbs/steps)
-        # curb: True if stairs/curbs detected AND no ramp
-        ramp_detected = yolov8_features.get("ramp_detected", False)
-        stairs_detected = yolov8_features.get("stairs_detected", False)
-        is_accessible = gemini_result.get("accessible", False)
+        # Use only Gemini's direct ramp/curb detection
+        gemini_ramp = gemini_result.get("ramp", False)
+        gemini_curb = gemini_result.get("curb", False)
         
-        # Determine ramp and curb based on detections and accessibility
-        has_ramp = ramp_detected or (is_accessible and not stairs_detected)
-        has_curb = stairs_detected and not ramp_detected
+        has_ramp = gemini_ramp
+        has_curb = gemini_curb
         print(f"[AI-PRED] Final prediction: ramp={has_ramp}, curb={has_curb}", flush=True)
         
         # Create AI prediction

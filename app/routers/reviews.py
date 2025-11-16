@@ -186,15 +186,12 @@ async def submit_review(
                 gemini_result = await gemini.analyze_accessibility(analysis_image, filename)
                 
                 # Convert to prediction format
-                # Use Gemini's direct ramp/curb detection, combined with YOLOv8 results
+                # Use only Gemini's direct ramp/curb detection
                 gemini_ramp = gemini_result.get("ramp", False)
                 gemini_curb = gemini_result.get("curb", False)
-                ramp_detected = yolov8_features.get("ramp_detected", False)
-                stairs_detected = yolov8_features.get("stairs_detected", False)
                 
-                # Combine YOLOv8 and Gemini results (if either detects it, consider it present)
-                has_ramp = ramp_detected or gemini_ramp
-                has_curb = (stairs_detected or gemini_curb) and not has_ramp  # Only curb if no ramp
+                has_ramp = gemini_ramp
+                has_curb = gemini_curb
                 
                 # Update shop with AI prediction
                 ai_prediction = ShopUpdateAI(
