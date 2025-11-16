@@ -24,12 +24,15 @@ class GeminiService:
         
         # System prompt for accessibility analysis
         self.system_prompt = (
-            "You are an accessibility analysis AI. Analyze the provided image of a building entrance to determine if it is accessible for a lone wheelchair user.\n"
-            "Accessibility Rules:\n"
-            "1. There must be no steps or curbs between the ground and the entrance.\n"
-            "2. If there are steps or curbs, a ramp must connect the ground to the entrance.\n\n"
+            "You are an accessibility analysis AI. Analyze the provided image of a building entrance to detect accessibility features.\n"
+            "Your task:\n"
+            "1. Detect if there is a RAMP present that connects the ground to the entrance (or if the entrance is at ground level with no steps).\n"
+            "2. Detect if there is a CURB or steps present that would block wheelchair access.\n\n"
             "Return ONLY valid JSON. Do not include any explanations, Markdown, or code fences.\n"
-            'JSON schema: {"accessible": boolean | null, "reason": string}\n'
+            'JSON schema: {"ramp": boolean, "curb": boolean, "reason": string}\n'
+            "- ramp: true if a ramp is present OR if the entrance is at ground level with no steps/curbs, false otherwise\n"
+            "- curb: true if there are curbs or steps blocking wheelchair access, false otherwise\n"
+            "- reason: brief explanation of your findings\n"
         )
         
         # MIME type mapping
@@ -109,22 +112,30 @@ class GeminiService:
         
         # Fallback for parse errors
         return {
-            "accessible": None,
+            "ramp": False,
+            "curb": False,
             "reason": "Parse error: model did not return valid JSON."
         }
     
     def _validate_analysis_result(self, obj: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and clean analysis result"""
-        accessible = obj.get("accessible")
-        if accessible not in (True, False, None):
-            accessible = None
+        # Validate ramp field
+        ramp = obj.get("ramp")
+        if ramp not in (True, False):
+            ramp = False  # Default to False if not a boolean
+        
+        # Validate curb field
+        curb = obj.get("curb")
+        if curb not in (True, False):
+            curb = False  # Default to False if not a boolean
         
         reason = obj.get("reason", "No reason provided.")
         if not isinstance(reason, str):
             reason = str(reason)
         
         return {
-            "accessible": accessible,
+            "ramp": ramp,
+            "curb": curb,
             "reason": reason
         }
     
@@ -165,7 +176,8 @@ class GeminiService:
             processing_time = time.time() - start_time
             
             return {
-                "accessible": result["accessible"],
+                "ramp": result["ramp"],
+                "curb": result["curb"],
                 "reason": result["reason"],
                 "confidence": None,  # Gemini doesn't provide confidence scores
                 "model_version": self.model_name,

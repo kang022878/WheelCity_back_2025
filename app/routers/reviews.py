@@ -63,18 +63,34 @@ async def generate_upload_urls(
     public_urls: List[str] = []
 
     for original_name in request.files:
-        extension = os.path.splitext(original_name)[1] or ""
+        extension = os.path.splitext(original_name)[1] or ".jpg"
         key = f"reviews/{shop_id}/{uuid.uuid4().hex}{extension}"
         print(f"[S3] Generating URL for key: {key}", flush=True)
+        
+        # Determine content type from extension
+        content_type_map = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }
+        content_type = content_type_map.get(extension.lower(), "image/jpeg")
+        
+        # Generate pre-signed URL with Content-Type to match the upload request
         upload_url = s3.generate_presigned_url(
             "put_object",
-            Params={"Bucket": S3_BUCKET_NAME, "Key": key},
+            Params={
+                "Bucket": S3_BUCKET_NAME,
+                "Key": key,
+                "ContentType": content_type,
+            },
             ExpiresIn=S3_PRESIGN_EXPIRES,
         )
         public_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{key}"
         upload_entries.append({"file_name": key, "upload_url": upload_url})
         public_urls.append(public_url)
-        print(f"[S3] Generated public URL: {public_url}", flush=True)
+        print(f"[S3] Generated public URL: {public_url} with Content-Type: {content_type}", flush=True)
 
     print(f"[S3] Returning {len(public_urls)} upload URLs", flush=True)
     return {"upload_urls": upload_entries, "public_urls": public_urls}
@@ -110,6 +126,10 @@ async def submit_review(
     doc["user_id"] = user_oid
     doc["created_at"] = datetime.now(timezone.utc)
     doc["disagree_with_ai"] = user_disagrees
+    
+    # Convert HttpUrl objects to strings for MongoDB
+    if "photo_urls" in doc and doc["photo_urls"]:
+        doc["photo_urls"] = [str(url) for url in doc["photo_urls"]]
 
     result = await database.reviews.insert_one(doc)
     inserted_id = result.inserted_id
@@ -128,9 +148,22 @@ async def submit_review(
                 from app.models import ShopUpdateAI
                 
                 print(f"[REVIEW] Downloading image from {first_image_url} for initial AI evaluation", flush=True)
-                image_response = requests.get(first_image_url, timeout=30)
-                image_response.raise_for_status()
-                image_bytes = image_response.content
+                # Extract S3 key from URL (format: https://bucket.s3.amazonaws.com/key)
+                # or use the URL directly if it's already a key
+                if first_image_url.startswith(f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/"):
+                    s3_key = first_image_url.replace(f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/", "")
+                    # Download using boto3 with credentials
+                    s3 = get_s3_client()
+                    print(f"[REVIEW] Downloading from S3 bucket {S3_BUCKET_NAME}, key: {s3_key}", flush=True)
+                    s3_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                    image_bytes = s3_response['Body'].read()
+                    print(f"[REVIEW] Successfully downloaded {len(image_bytes)} bytes from S3", flush=True)
+                else:
+                    # Fallback to HTTP request for external URLs
+                    print(f"[REVIEW] Using HTTP request for external URL", flush=True)
+                    image_response = requests.get(first_image_url, timeout=30)
+                    image_response.raise_for_status()
+                    image_bytes = image_response.content
                 
                 # Run YOLOv8 analysis
                 print(f"[REVIEW] Running YOLOv8 analysis for initial evaluation", flush=True)
@@ -153,12 +186,15 @@ async def submit_review(
                 gemini_result = await gemini.analyze_accessibility(analysis_image, filename)
                 
                 # Convert to prediction format
+                # Use Gemini's direct ramp/curb detection, combined with YOLOv8 results
+                gemini_ramp = gemini_result.get("ramp", False)
+                gemini_curb = gemini_result.get("curb", False)
                 ramp_detected = yolov8_features.get("ramp_detected", False)
                 stairs_detected = yolov8_features.get("stairs_detected", False)
-                is_accessible = gemini_result.get("accessible", False)
                 
-                has_ramp = ramp_detected or (is_accessible and not stairs_detected)
-                has_curb = stairs_detected and not ramp_detected
+                # Combine YOLOv8 and Gemini results (if either detects it, consider it present)
+                has_ramp = ramp_detected or gemini_ramp
+                has_curb = (stairs_detected or gemini_curb) and not has_ramp  # Only curb if no ramp
                 
                 # Update shop with AI prediction
                 ai_prediction = ShopUpdateAI(
@@ -167,8 +203,13 @@ async def submit_review(
                     image_url=payload.photo_urls[0]
                 )
                 
+                # Convert to dict and ensure image_url is a string (not HttpUrl)
+                ai_pred_dict = ai_prediction.model_dump()
+                if "image_url" in ai_pred_dict and ai_pred_dict["image_url"]:
+                    ai_pred_dict["image_url"] = str(ai_pred_dict["image_url"])
+                
                 update_doc = {
-                    "ai_prediction": ai_prediction.model_dump(),
+                    "ai_prediction": ai_pred_dict,
                     "needPhotos": False,
                 }
                 

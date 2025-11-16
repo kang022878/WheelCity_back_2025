@@ -40,7 +40,7 @@ async def main():
         ]
     )
 
-    await db.reviews.insert_one(
+    review = await db.reviews.insert_one(
         {
             "shop_id": shops.inserted_ids[0],
             "user_id": user.inserted_id,
@@ -54,7 +54,12 @@ async def main():
         }
     )
 
-    print("Seeded demo data")
+    print("✅ Seeded demo data successfully!")
+    print(f"   - Created user: {user.inserted_id}")
+    print(f"   - Created {len(shops.inserted_ids)} shops:")
+    for i, shop_id in enumerate(shops.inserted_ids):
+        print(f"     Shop {i+1}: {shop_id}")
+    print(f"   - Created review: {review.inserted_id}")
     client.close()
 
 asyncio.run(main())

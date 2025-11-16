@@ -85,9 +85,23 @@ async def analyze_image_for_ai_prediction(image_url: str) -> Optional[Dict[str, 
     try:
         # Download image
         logger.info(f"Downloading image from {image_url} for re-evaluation")
-        response = requests.get(image_url, timeout=30)
-        response.raise_for_status()
-        image_bytes = response.content
+        import os
+        import boto3
+        
+        S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+        
+        # Use boto3 for S3 URLs, requests for external URLs
+        if S3_BUCKET_NAME and image_url.startswith(f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/"):
+            s3_key = image_url.replace(f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/", "")
+            s3 = boto3.client("s3")
+            logger.info(f"Downloading from S3 bucket {S3_BUCKET_NAME}, key: {s3_key}")
+            s3_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+            image_bytes = s3_response['Body'].read()
+        else:
+            # Fallback to HTTP request for external URLs
+            response = requests.get(image_url, timeout=30)
+            response.raise_for_status()
+            image_bytes = response.content
         
         # Run YOLOv8 analysis
         yolov8_features = await yolov8_service.analyze_accessibility_features(image_bytes)
@@ -108,12 +122,15 @@ async def analyze_image_for_ai_prediction(image_url: str) -> Optional[Dict[str, 
         gemini_result = await gemini.analyze_accessibility(analysis_image, filename)
         
         # Convert to prediction format
+        # Use Gemini's direct ramp/curb detection, combined with YOLOv8 results
+        gemini_ramp = gemini_result.get("ramp", False)
+        gemini_curb = gemini_result.get("curb", False)
         ramp_detected = yolov8_features.get("ramp_detected", False)
         stairs_detected = yolov8_features.get("stairs_detected", False)
-        is_accessible = gemini_result.get("accessible", False)
         
-        has_ramp = ramp_detected or (is_accessible and not stairs_detected)
-        has_curb = stairs_detected and not ramp_detected
+        # Combine YOLOv8 and Gemini results (if either detects it, consider it present)
+        has_ramp = ramp_detected or gemini_ramp
+        has_curb = (stairs_detected or gemini_curb) and not has_ramp  # Only curb if no ramp
         
         return {"ramp": has_ramp, "curb": has_curb}
         
@@ -266,8 +283,10 @@ async def handle_ai_reevaluation_on_disagree(
             # Update shop's ai_prediction
             from app.models import ShopUpdateAI
             
-            # Get the first image URL for the prediction
+            # Get the first image URL for the prediction (ensure it's a string)
             first_image_url = image_urls[0] if image_urls else None
+            if first_image_url:
+                first_image_url = str(first_image_url)
             
             update_doc = {
                 "ai_prediction": {
