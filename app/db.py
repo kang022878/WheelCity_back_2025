@@ -1,10 +1,16 @@
 from typing import Optional
 import os
+from pathlib import Path
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
-load_dotenv()
+# Get the project root directory (where .env should be)
+project_root = Path(__file__).parent.parent
+env_path = project_root / ".env"
+
+# Load .env file from project root
+load_dotenv(dotenv_path=env_path)
 
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME", "wheel_city")
@@ -20,7 +26,18 @@ async def connect(*args, **kwargs):
     """
     global _client, db
     if not MONGO_URI:
-        raise ValueError("❌ MONGO_URI is not set in .env file")
+        print(f"❌ MONGO_URI is not set in .env file")
+        print(f"   Looking for .env at: {env_path}")
+        print(f"   .env file exists: {env_path.exists()}")
+        if env_path.exists():
+            print(f"   .env file size: {env_path.stat().st_size} bytes")
+        error_msg = (
+            "❌ MONGO_URI is not set in .env file. Please check:\n"
+            "   1. Variable name is MONGO_URI (all uppercase)\n"
+            "   2. No spaces around the = sign\n"
+            "   3. .env file is in the wheel_city_server directory"
+        )
+        raise ValueError(error_msg)
 
     try:
         _client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())

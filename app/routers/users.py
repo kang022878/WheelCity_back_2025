@@ -4,13 +4,15 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ReturnDocument
 
-from app.db import db
 from app.models import UserCreate, UserUpdate, serialize_doc
 
 router = APIRouter()
 
 
 def get_db() -> AsyncIOMotorDatabase:
+    # Import db module to access the current value (not the imported value at module load time)
+    import app.db
+    db = app.db.db
     if db is None:
         raise HTTPException(status_code=500, detail="Database not connected")
     return db

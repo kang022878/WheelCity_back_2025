@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Literal, Optional, Sequence
 
 from bson import ObjectId
@@ -54,6 +55,8 @@ class ShopCreate(BaseModel):
     name: str
     location: GeoPoint
     ai_prediction: Optional[AIPrediction] = None
+    needPhotos: bool = False
+    ai_recheck_date: Optional[datetime] = None
 
 
 class ShopUpdateAI(BaseModel):
@@ -87,15 +90,26 @@ class S3UploadRequest(BaseModel):
 
 
 def _stringify(val):
-    return str(val) if isinstance(val, ObjectId) else val
+    """Convert MongoDB types to JSON-serializable types."""
+    if isinstance(val, ObjectId):
+        return str(val)
+    elif isinstance(val, datetime):
+        return val.isoformat()
+    return val
 
 
 def serialize_doc(doc: dict) -> dict:
-    """Convert Mongo ObjectIds to strings for API responses."""
-    if "_id" in doc:
-        doc["_id"] = _stringify(doc["_id"])
-    if "shop_id" in doc:
-        doc["shop_id"] = _stringify(doc["shop_id"])
-    if "user_id" in doc:
-        doc["user_id"] = _stringify(doc["user_id"])
-    return doc
+    """Convert Mongo ObjectIds and other types to JSON-serializable formats."""
+    if not isinstance(doc, dict):
+        return doc
+    
+    # Create a copy to avoid mutating the original
+    result = {}
+    for key, value in doc.items():
+        if isinstance(value, dict):
+            result[key] = serialize_doc(value)
+        elif isinstance(value, list):
+            result[key] = [serialize_doc(item) if isinstance(item, dict) else _stringify(item) for item in value]
+        else:
+            result[key] = _stringify(value)
+    return result
