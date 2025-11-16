@@ -134,6 +134,19 @@ async def submit_review(
     result = await database.reviews.insert_one(doc)
     inserted_id = result.inserted_id
 
+    # Increment user's review_score: 0.2m if photos are included, 0.1m otherwise
+    score_increment = 0.2 if payload.photo_urls and len(payload.photo_urls) > 0 else 0.1
+    try:
+        await database.users.update_one(
+            {"_id": user_oid},
+            {"$inc": {"review_score": score_increment}}
+        )
+        print(f"[REVIEW] Incremented review_score by {score_increment}m for user {payload.user_id} (photos: {len(payload.photo_urls) if payload.photo_urls else 0})", flush=True)
+    except Exception as e:
+        print(f"[REVIEW ERROR] Failed to increment review_score: {e}", flush=True)
+        logger.error(f"Failed to increment review_score for user {payload.user_id}: {e}")
+        # Don't fail review submission if score increment fails
+
     # If review has images and shop doesn't have AI prediction, trigger initial AI evaluation
     if payload.photo_urls and len(payload.photo_urls) > 0:
         shop_ai_pred = shop.get("ai_prediction")
