@@ -131,8 +131,16 @@ async def submit_review(
     if "photo_urls" in doc and doc["photo_urls"]:
         doc["photo_urls"] = [str(url) for url in doc["photo_urls"]]
 
+    print(f"[REVIEW] Inserting review document: shop_id={shop_oid}, user_id={user_oid}", flush=True)
+    print(f"[REVIEW] Review document keys: {list(doc.keys())}", flush=True)
+    print(f"[REVIEW] Review text: {doc.get('review_text', 'N/A')[:50]}...", flush=True)
+    print(f"[REVIEW] Photo URLs count: {len(doc.get('photo_urls', []))}", flush=True)
+    
     result = await database.reviews.insert_one(doc)
     inserted_id = result.inserted_id
+    
+    print(f"[REVIEW] Review inserted successfully with ID: {inserted_id}", flush=True)
+    print(f"[REVIEW] Insert result acknowledged: {result.acknowledged}", flush=True)
 
     # Increment user's review_score: 0.2m if photos are included, 0.1m otherwise
     score_increment = 0.2 if payload.photo_urls and len(payload.photo_urls) > 0 else 0.1
